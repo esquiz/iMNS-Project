@@ -1,0 +1,44 @@
+SetGridsize(1024, 1024, 1)
+SetCellsize(2.5e-9,2.5e-9,2.5e-9)
+SetPBC(3,3,0)
+
+// Material Parameters for Permalloy
+
+Msat = 638e3 // A/m
+Aex = 13e-12 // J/m
+alpha = 0.006
+
+// We will generate a sinusoidal AC field at the resonant frequency found in the previous simulation.
+
+sinusamp:= 0.001 // Amplitude of sinusoidal field in T.
+fpeak:= 3.593388302440992e9 // Peak frequency in Hz from spectrum generated using pyFilmPulse.mx3
+
+// To obtain a "nice" picture of the magnetisation evolution, we will save m at a frequency 20 times greater
+// than fpeak.
+
+fsample:= 20*fpeak
+samplingTime:= 1./fsample
+
+// Load magnetisation for relaxed state saved from pyFilmPulse.mx3
+m.loadfile("PyFilmPulse.out/loadfile.ovf")
+
+// AC field in the z-direction with static field along x.
+Bx := 50e-3
+B_ext = vector(Bx, 0, (sinusamp*sin(2.*pi*fpeak*t)))
+
+// We will run the time evolution for 100 periods to allow the 
+// system to reach a steady state.
+run(100./fpeak)
+
+// We introduce the table here, so data from the first 100 periods is not saved.
+tableAdd(E_total)
+tableadd(B_ext)
+autosave(m, samplingTime)
+tableautosave(samplingTime)
+
+// We will save the time evolution for 5 periods
+MaxDt = samplingTime / 10
+run(5./fpeak)
+
+print("Simulated ",5./fpeak," seconds of time evolution.")
+print("Saved magnetisation every ",samplingTime, "seconds.")

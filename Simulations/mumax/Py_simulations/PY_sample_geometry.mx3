@@ -1,0 +1,91 @@
+// Sample Dimensions
+Lx := 2.56e-6
+Ly := 2.56e-6
+
+tPy := 20e-9			// Permalloy thickness (m)
+tAl := 10e-9        // Aluminium cap thickness (m)
+Lz := tPy + tAl     // total stack thickness
+
+// Mesh
+Nx := 1024
+Ny := 1024
+Nz := 12
+
+SetGridsize(Nx,Ny,Nz)
+SetCellsize(Lx/Nx, Ly/Ny, Lz/Nz)
+
+SetPBC(2,2,0)
+
+// Regions
+
+// Region 1 -> Permalloy
+// Region 2 -> Aluminium cap
+
+DefRegion(1, layers(0,8))
+DefRegion(2, layers(8,12))
+
+setgeom(cuboid(Lx, Ly, Lz))
+
+// Permalloy (Ni80Fe20) parameters
+
+Msat.SetRegion(1, 638e3)        // A/m
+Aex.SetRegion(1, 13e-12)       // J/m
+alpha.SetRegion(1, 0.006)
+
+Ku1.SetRegion(1, 0)             // negligible anisotropy
+
+// Gyromagnetic ratio
+gammaLL = 2.211e5               // m/(A·s)
+
+// Aluminium cap parameters
+
+// Aluminium is non-magnetic in MuMax.
+// Set magnetic quantities to zero.
+
+Msat.SetRegion(2, 0)
+Aex.SetRegion(2, 0)
+alpha.SetRegion(2, 0)
+
+// Calculate required sampling - the Nyquist sampling theorem tells us that
+// we need to save our data at least at double the frequency of the fastest
+// process we care about.
+//
+// The Fast Fourier Transform will give a frequency resolution of our Nyqyuist
+// frequency divided by the number of time steps in the simulation.
+
+pamp:= 0.002 // maximum amplitude of applied pulse in T.
+pwait:= 10e-9+50e-12 // Location in time of pulse peak in s, including 50 ns relaxation time before the pulse.
+fcut:= 25e9 // Cut-off frequency for SincPulse in Hz.
+
+Nyquist:= 1./(2.*fcut) // Time step required to sample at Nyquist frequency for fcut.
+fres:= 0.05e9 // Desired frequency resolution in Hz.
+stepNo:= 1./(Nyquist*fres) // Number of time steps required for FFT resolution to match fres.
+stepNo2:= 2*pow(2, ilogb(stepNo)) // Convert to power of 2 for efficient FFT while keeping resolution better than fres.
+print("Nyquist time interval:",Nyquist)
+print("Number of time steps:",stepNo2)
+
+// Initialise
+
+m = uniform(1, .1, 0)
+relax()
+saveas(m,"init")    // relaxed state
+
+Bx := 100e-3
+B_ext = vector(Bx, 0, 0)
+relax()
+run(10e-9) // Allowing the magnetisation to relax under time evolution reduces low frequency noise.
+saveas(m, "loadfile") // Save relaxed state
+
+// Sinc pulse in the z-direction with static field along x.
+// B_ext = vector(Bx, 0, (pamp*sin(2.*pi*fcut*(t-pwait)))/(2.*pi*fcut*(t-pwait)))
+
+B_ext = vector(Bx, 0, (pamp * sinc(2.*pi*fcut*(t - pwait))))
+
+// We only add our table now, so the 50 ns of relaxation time are not saved.
+tableAdd(E_total)
+tableadd(B_ext)
+//autosave(m, Nyquist)
+tableautosave(Nyquist)
+
+MaxDt = Nyquist // We explicitly tell mumax not to use a timestep greater than our Nyquist time.
+run((stepNo2)*Nyquist)
